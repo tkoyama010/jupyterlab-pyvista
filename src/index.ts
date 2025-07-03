@@ -110,10 +110,9 @@ const plugin: JupyterFrontEndPlugin<void> = {
       rank: 0
     });
     
-    // Add double-click handler
-    const fileBrowser = fileBrowserFactory.tracker.currentWidget;
-    if (fileBrowser) {
-      fileBrowser.model.fileChanged.connect((_: any, change: any) => {
+    // Add double-click handler for all file browsers
+    fileBrowserFactory.tracker.widgetAdded.connect((sender, widget) => {
+      widget.model.fileChanged.connect((_: any, change: any) => {
         if (change.type === 'open' && change.newValue) {
           const path = change.newValue.path;
           if (vtkExtensions.some(ext => path.endsWith(ext))) {
@@ -121,7 +120,19 @@ const plugin: JupyterFrontEndPlugin<void> = {
           }
         }
       });
-    }
+    });
+    
+    // Handle existing file browsers
+    fileBrowserFactory.tracker.forEach(widget => {
+      widget.model.fileChanged.connect((_: any, change: any) => {
+        if (change.type === 'open' && change.newValue) {
+          const path = change.newValue.path;
+          if (vtkExtensions.some(ext => path.endsWith(ext))) {
+            commands.execute(command, { path });
+          }
+        }
+      });
+    });
   }
 };
 
