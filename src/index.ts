@@ -7,8 +7,6 @@ import { IFileBrowserFactory } from '@jupyterlab/filebrowser';
 
 import { ServerConnection } from '@jupyterlab/services';
 
-import { IDisposable } from '@lumino/disposable';
-
 import { Widget } from '@lumino/widgets';
 
 const PLUGIN_ID = 'jupyterlab-pyvista:plugin';
@@ -73,31 +71,57 @@ const plugin: JupyterFrontEndPlugin<void> = {
     });
     
     // Add context menu item for VTK files
-    const selectorVTK = '.jp-DirListing-item[data-file-type="text/plain"]';
     const vtkExtensions = ['.vtk', '.vtu', '.vtp', '.vts', '.vtr', '.vti'];
     
-    app.contextMenu.addItem({
-      command,
-      selector: selectorVTK,
-      rank: 0,
-      args: (node: HTMLElement) => {
-        const fileName = node.querySelector('.jp-DirListing-itemText')?.textContent || '';
-        if (vtkExtensions.some(ext => fileName.endsWith(ext))) {
-          return { path: fileBrowserFactory.defaultBrowser.model.path + '/' + fileName };
+    // Add command to handle context menu with current selection
+    const contextCommand = 'pyvista:open-vtk-context';
+    commands.addCommand(contextCommand, {
+      label: 'Open with PyVista',
+      execute: () => {
+        const widget = fileBrowserFactory.tracker.currentWidget;
+        if (!widget) {
+          return;
         }
-        return {};
+        const selectedItems = Array.from(widget.selectedItems());
+        if (selectedItems.length > 0) {
+          const item = selectedItems[0];
+          if (vtkExtensions.some(ext => item.name.endsWith(ext))) {
+            commands.execute(command, { path: item.path });
+          }
+        }
+      },
+      isVisible: () => {
+        const widget = fileBrowserFactory.tracker.currentWidget;
+        if (!widget) {
+          return false;
+        }
+        const selectedItems = Array.from(widget.selectedItems());
+        if (selectedItems.length > 0) {
+          const item = selectedItems[0];
+          return vtkExtensions.some(ext => item.name.endsWith(ext));
+        }
+        return false;
       }
+    });
+    
+    app.contextMenu.addItem({
+      command: contextCommand,
+      selector: '.jp-DirListing-item',
+      rank: 0
     });
     
     // Add double-click handler
-    fileBrowserFactory.defaultBrowser.model.fileChanged.connect((model, change) => {
-      if (change.type === 'open' && change.newValue) {
-        const path = change.newValue.path;
-        if (vtkExtensions.some(ext => path.endsWith(ext))) {
-          commands.execute(command, { path });
+    const fileBrowser = fileBrowserFactory.tracker.currentWidget;
+    if (fileBrowser) {
+      fileBrowser.model.fileChanged.connect((_: any, change: any) => {
+        if (change.type === 'open' && change.newValue) {
+          const path = change.newValue.path;
+          if (vtkExtensions.some(ext => path.endsWith(ext))) {
+            commands.execute(command, { path });
+          }
         }
-      }
-    });
+      });
+    }
   }
 };
 
