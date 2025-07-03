@@ -6,7 +6,6 @@ from jupyter_server.base.handlers import APIHandler
 from jupyter_server.utils import url_path_join
 import tornado
 import pyvista as pv
-from trame import AsyncWebContext
 from trame.app import get_server
 from trame_vuetify.ui.vuetify3 import VAppLayout
 from trame_vtk.widgets.vtk import VtkRemoteView
@@ -55,20 +54,21 @@ class VTKHandler(APIHandler):
                     view = VtkRemoteView(plotter.ren_win)
                     view.update()
             
+            # Start the server
+            server.start()
+            
             # Get the viewer URL
-            async with AsyncWebContext(server) as context:
-                await context.ready
-                viewer_url = f"/trame/{server.name}/"
-                
-                self.finish(json.dumps({
-                    "status": "success",
-                    "viewer_url": viewer_url,
-                    "mesh_info": {
-                        "n_points": mesh.n_points,
-                        "n_cells": mesh.n_cells,
-                        "bounds": mesh.bounds,
-                    }
-                }))
+            viewer_url = f"/trame/{server.name}/"
+            
+            self.finish(json.dumps({
+                "status": "success",
+                "viewer_url": viewer_url,
+                "mesh_info": {
+                    "n_points": mesh.n_points,
+                    "n_cells": mesh.n_cells,
+                    "bounds": mesh.bounds,
+                }
+            }))
                 
         except Exception as e:
             self.set_status(500)
