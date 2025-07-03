@@ -11,6 +11,7 @@ import { Widget } from '@lumino/widgets';
 
 import { IDocumentManager } from '@jupyterlab/docmanager';
 
+
 const PLUGIN_ID = 'jupyterlab-pyvista:plugin';
 
 class VTKViewer extends Widget {
@@ -48,6 +49,7 @@ class VTKViewer extends Widget {
   }
 }
 
+
 const plugin: JupyterFrontEndPlugin<void> = {
   id: PLUGIN_ID,
   requires: [IFileBrowserFactory, IDocumentManager],
@@ -61,11 +63,14 @@ const plugin: JupyterFrontEndPlugin<void> = {
     commands.addCommand(command, {
       label: 'Open with PyVista',
       execute: (args: any) => {
+        console.log('PyVista command executed with args:', args);
         const path = args['path'] as string;
         if (!path) {
+          console.log('No path provided to PyVista command');
           return;
         }
         
+        console.log('Creating VTK viewer for path:', path);
         const widget = new VTKViewer(path, app.serviceManager.serverSettings.baseUrl);
         app.shell.add(widget, 'main');
         app.shell.activateById(widget.id);
@@ -75,25 +80,45 @@ const plugin: JupyterFrontEndPlugin<void> = {
     // Add context menu item for VTK files
     const vtkExtensions = ['.vtk', '.vtu', '.vtp', '.vts', '.vtr', '.vti'];
     
-    // Register custom file type for VTK files
-    docManager.registry.addFileType({
-      name: 'vtk',
-      mimeTypes: ['application/x-vtk'],
-      extensions: vtkExtensions,
-      displayName: 'VTK File',
-      iconClass: 'jp-MaterialIcon jp-ImageIcon'
-    });
-    
-    // Override the open method to intercept VTK file opening
-    const originalOpen = docManager.open.bind(docManager);
-    docManager.open = (path: string, widgetName?: string, kernel?: any, options?: any) => {
-      if (vtkExtensions.some(ext => path.endsWith(ext))) {
-        // Open with PyVista instead of default editor
-        commands.execute(command, { path });
-        return undefined;
-      }
-      return originalOpen(path, widgetName, kernel, options);
+    // Add file browser event handlers
+    const setupFileBrowserHandlers = (fileBrowser: any) => {
+      if (!fileBrowser) return;
+      
+      console.log('Setting up file browser handlers');
+      
+      // Listen for double-click events on the file browser
+      fileBrowser.node.addEventListener('dblclick', (event: MouseEvent) => {
+        console.log('Double-click detected on file browser');
+        const target = event.target as HTMLElement;
+        const itemNode = target.closest('.jp-DirListing-item');
+        if (itemNode) {
+          const nameElement = itemNode.querySelector('.jp-DirListing-itemText');
+          if (nameElement) {
+            const fileName = nameElement.textContent || '';
+            console.log('Double-clicked file:', fileName);
+            if (vtkExtensions.some(ext => fileName.endsWith(ext))) {
+              console.log('Opening VTK file:', fileName);
+              event.preventDefault();
+              event.stopPropagation();
+              // Get the full path
+              const selectedItems = Array.from(fileBrowser.selectedItems());
+              if (selectedItems.length > 0) {
+                const item = selectedItems[0] as any;
+                commands.execute(command, { path: item.path });
+              }
+            }
+          }
+        }
+      });
     };
+    
+    // Set up handlers for existing file browsers
+    fileBrowserFactory.tracker.forEach(setupFileBrowserHandlers);
+    
+    // Set up handlers for new file browsers
+    fileBrowserFactory.tracker.widgetAdded.connect((sender, widget) => {
+      setupFileBrowserHandlers(widget);
+    });
     
     // Add command to handle context menu with current selection
     const contextCommand = 'pyvista:open-vtk-context';
@@ -130,30 +155,6 @@ const plugin: JupyterFrontEndPlugin<void> = {
       command: contextCommand,
       selector: '.jp-DirListing-item',
       rank: 0
-    });
-    
-    // Add double-click handler for all file browsers
-    fileBrowserFactory.tracker.widgetAdded.connect((sender, widget) => {
-      widget.model.fileChanged.connect((_: any, change: any) => {
-        if (change.type === 'open' && change.newValue) {
-          const path = change.newValue.path;
-          if (vtkExtensions.some(ext => path.endsWith(ext))) {
-            commands.execute(command, { path });
-          }
-        }
-      });
-    });
-    
-    // Handle existing file browsers
-    fileBrowserFactory.tracker.forEach(widget => {
-      widget.model.fileChanged.connect((_: any, change: any) => {
-        if (change.type === 'open' && change.newValue) {
-          const path = change.newValue.path;
-          if (vtkExtensions.some(ext => path.endsWith(ext))) {
-            commands.execute(command, { path });
-          }
-        }
-      });
     });
   }
 };
