@@ -28,20 +28,7 @@ class VTKHandler(APIHandler):
             server.client_type = "vue3"
             
             # Load the VTK file with PyVista
-            if file_path.endswith('.vtu'):
-                mesh = pv.read(file_path)
-            elif file_path.endswith('.vtp'):
-                mesh = pv.read(file_path)
-            elif file_path.endswith('.vtk'):
-                mesh = pv.read(file_path)
-            elif file_path.endswith('.vts'):
-                mesh = pv.read(file_path)
-            elif file_path.endswith('.vtr'):
-                mesh = pv.read(file_path)
-            elif file_path.endswith('.vti'):
-                mesh = pv.read(file_path)
-            else:
-                mesh = pv.read(file_path)
+            mesh = pv.read(file_path)
             
             # Create PyVista plotter
             plotter = pv.Plotter(off_screen=True)
@@ -54,23 +41,23 @@ class VTKHandler(APIHandler):
                     view = VtkRemoteView(plotter.ren_win)
                     view.update()
             
-            # Start the server
-            await server.start()
-            
-            # Get the viewer URL
-            viewer_url = f"/trame/{server.name}/"
+            # For now, just return mesh info without starting the server
+            # TODO: Implement proper trame server integration
             
             self.finish(json.dumps({
                 "status": "success",
-                "viewer_url": viewer_url,
+                "message": "VTK file loaded successfully",
                 "mesh_info": {
                     "n_points": mesh.n_points,
                     "n_cells": mesh.n_cells,
-                    "bounds": mesh.bounds,
+                    "bounds": list(mesh.bounds),
+                    "file_path": file_path
                 }
             }))
                 
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             self.set_status(500)
             self.finish(json.dumps({"error": str(e)}))
 
