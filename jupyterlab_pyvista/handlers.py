@@ -55,7 +55,7 @@ class VTKHandler(APIHandler):
                     view.update()
             
             # Start the server
-            server.start()
+            await server.start()
             
             # Get the viewer URL
             viewer_url = f"/trame/{server.name}/"
