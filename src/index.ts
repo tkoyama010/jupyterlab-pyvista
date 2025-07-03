@@ -9,6 +9,8 @@ import { ServerConnection } from '@jupyterlab/services';
 
 import { Widget } from '@lumino/widgets';
 
+import { IDocumentManager } from '@jupyterlab/docmanager';
+
 const PLUGIN_ID = 'jupyterlab-pyvista:plugin';
 
 class VTKViewer extends Widget {
@@ -48,9 +50,9 @@ class VTKViewer extends Widget {
 
 const plugin: JupyterFrontEndPlugin<void> = {
   id: PLUGIN_ID,
-  requires: [IFileBrowserFactory],
+  requires: [IFileBrowserFactory, IDocumentManager],
   autoStart: true,
-  activate: (app: JupyterFrontEnd, fileBrowserFactory: IFileBrowserFactory) => {
+  activate: (app: JupyterFrontEnd, fileBrowserFactory: IFileBrowserFactory, docManager: IDocumentManager) => {
     console.log('JupyterLab extension jupyterlab-pyvista is activated!');
     
     const { commands } = app;
@@ -72,6 +74,26 @@ const plugin: JupyterFrontEndPlugin<void> = {
     
     // Add context menu item for VTK files
     const vtkExtensions = ['.vtk', '.vtu', '.vtp', '.vts', '.vtr', '.vti'];
+    
+    // Register custom file type for VTK files
+    docManager.registry.addFileType({
+      name: 'vtk',
+      mimeTypes: ['application/x-vtk'],
+      extensions: vtkExtensions,
+      displayName: 'VTK File',
+      iconClass: 'jp-MaterialIcon jp-ImageIcon'
+    });
+    
+    // Override the open method to intercept VTK file opening
+    const originalOpen = docManager.open.bind(docManager);
+    docManager.open = (path: string, widgetName?: string, kernel?: any, options?: any) => {
+      if (vtkExtensions.some(ext => path.endsWith(ext))) {
+        // Open with PyVista instead of default editor
+        commands.execute(command, { path });
+        return undefined;
+      }
+      return originalOpen(path, widgetName, kernel, options);
+    };
     
     // Add command to handle context menu with current selection
     const contextCommand = 'pyvista:open-vtk-context';
