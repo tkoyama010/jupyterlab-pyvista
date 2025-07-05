@@ -14,11 +14,9 @@ setup(
         "jupyter_server>=1.0",
         "pyvista>=0.38.0",
     ],
-    entry_points={
-        "jupyter_serverproxy_servers": [
-            "jupyterlab_pyvista = jupyterlab_pyvista:_jupyter_server_extension_paths"
-        ]
-    },
+    data_files=[
+        ("etc/jupyter/jupyter_server_config.d", ["jupyter_server_config.d/jupyterlab_pyvista.json"]),
+    ],
     include_package_data=True,
     zip_safe=False,
 )
