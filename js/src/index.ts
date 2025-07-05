@@ -24,7 +24,7 @@ const CLASS_NAME = 'jp-PyVistaWidget';
  * A widget for rendering VTK/STL files using PyVista.
  */
 export class PyVistaWidget extends Widget {
-  private _iframe: HTMLIFrameElement;
+  private _container: HTMLDivElement;
   private _context: DocumentRegistry.Context;
 
   constructor(context: DocumentRegistry.Context) {
@@ -34,24 +34,51 @@ export class PyVistaWidget extends Widget {
     
     console.log('PyVista: Creating widget for file:', context.path);
     
-    this._iframe = document.createElement('iframe');
-    this._iframe.style.width = '100%';
-    this._iframe.style.height = '100%';
-    this._iframe.style.border = 'none';
-    this._iframe.setAttribute('sandbox', 'allow-scripts');
+    this._container = document.createElement('div');
+    this._container.style.width = '100%';
+    this._container.style.height = '100%';
+    this._container.style.padding = '20px';
+    this._container.style.display = 'flex';
+    this._container.style.flexDirection = 'column';
+    this._container.style.alignItems = 'center';
+    this._container.style.justifyContent = 'center';
+    this._container.style.backgroundColor = '#f5f5f5';
     
-    this.node.appendChild(this._iframe);
+    // Add title
+    const title = document.createElement('h2');
+    title.textContent = `3D Visualization: ${context.path}`;
+    title.style.marginBottom = '20px';
+    this._container.appendChild(title);
     
-    // Load visualization immediately - don't wait for file content
-    this._loadContent();
+    // Add open button
+    const openButton = document.createElement('button');
+    openButton.textContent = 'Open 3D Visualization in New Tab';
+    openButton.style.padding = '12px 24px';
+    openButton.style.fontSize = '16px';
+    openButton.style.backgroundColor = '#007ACC';
+    openButton.style.color = 'white';
+    openButton.style.border = 'none';
+    openButton.style.borderRadius = '4px';
+    openButton.style.cursor = 'pointer';
+    openButton.style.marginBottom = '20px';
     
-    // Reload on path change
-    context.pathChanged.connect(() => {
-      this._loadContent();
-    });
+    openButton.onclick = () => this._openVisualization();
+    this._container.appendChild(openButton);
+    
+    // Add info
+    const info = document.createElement('p');
+    info.textContent = 'Click the button above to open the 3D visualization in a new tab without sandbox restrictions.';
+    info.style.color = '#666';
+    info.style.textAlign = 'center';
+    this._container.appendChild(info);
+    
+    this.node.appendChild(this._container);
+    
+    // Auto-open visualization on load
+    setTimeout(() => this._openVisualization(), 500);
   }
 
-  private async _loadContent(): Promise<void> {
+  private async _openVisualization(): Promise<void> {
     const path = this._context.path;
     
     console.log('PyVista: Loading content for path:', path);
@@ -71,12 +98,13 @@ export class PyVistaWidget extends Widget {
       console.log('PyVista: API response data:', data);
       
       if (data.html_path) {
-        console.log('PyVista: Setting iframe src to:', `/files/${data.html_path}`);
-        this._iframe.src = `/files/${data.html_path}`;
+        const url = `/api/pyvista/html/${data.html_path}`;
+        console.log('PyVista: Opening visualization in new tab:', url);
+        window.open(url, '_blank');
       }
     } catch (error) {
       console.error('PyVista: Error loading content:', error);
-      this._iframe.srcdoc = `<html><body><p>Error loading visualization: ${error}</p></body></html>`;
+      alert(`Error loading visualization: ${error}`);
     }
   }
 }

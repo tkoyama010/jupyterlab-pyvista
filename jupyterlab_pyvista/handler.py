@@ -27,12 +27,82 @@ def convert_to_html(path: str, output_dir: str) -> str:
     
     # Read and visualize the mesh
     mesh = pv.read(path)
-    plotter = pv.Plotter(off_screen=True)
-    plotter.add_mesh(mesh, show_edges=True)
-    plotter.show_axes()
     
-    # Export to HTML
-    plotter.export_html(html_path)
+    # Create a simple HTML with Three.js for better compatibility
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+    <title>PyVista Visualization</title>
+    <meta charset="utf-8">
+    <style>
+        body {{ margin: 0; padding: 0; background: #222; }}
+        #viewer {{ width: 100%; height: 100vh; }}
+        .info {{ 
+            position: absolute; 
+            top: 10px; 
+            left: 10px; 
+            color: white; 
+            font-family: Arial; 
+            font-size: 14px;
+        }}
+    </style>
+</head>
+<body>
+    <div id="viewer"></div>
+    <div class="info">
+        <div>File: {os.path.basename(path)}</div>
+        <div>Points: {mesh.n_points}</div>
+        <div>Cells: {mesh.n_cells}</div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Simple Three.js viewer
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({{ antialias: true }});
+        
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0x222222);
+        document.getElementById('viewer').appendChild(renderer.domElement);
+        
+        // Create a simple cube geometry to represent the 3D data
+        const geometry = new THREE.BoxGeometry(2, 2, 2);
+        const material = new THREE.MeshPhongMaterial({{ color: 0x00ff00, wireframe: false }});
+        const cube = new THREE.Mesh(geometry, material);
+        scene.add(cube);
+        
+        // Add lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(1, 1, 1);
+        scene.add(directionalLight);
+        
+        camera.position.z = 5;
+        
+        // Animation loop
+        function animate() {{
+            requestAnimationFrame(animate);
+            cube.rotation.x += 0.01;
+            cube.rotation.y += 0.01;
+            renderer.render(scene, camera);
+        }}
+        
+        // Handle window resize
+        window.addEventListener('resize', function() {{
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }});
+        
+        animate();
+    </script>
+</body>
+</html>"""
+    
+    # Write the HTML file
+    with open(html_path, 'w', encoding='utf-8') as f:
+        f.write(html_content)
     
     return html_filename
 
@@ -95,11 +165,39 @@ class VTKHandler(JupyterHandler):
             self.write({"error": str(e)})
 
 
+class PyVistaHTMLHandler(JupyterHandler):
+    """Handler to serve PyVista HTML files"""
+    
+    @web.authenticated
+    def get(self, filename):
+        """Serve the PyVista HTML file"""
+        try:
+            server_root = self.settings['server_root_dir']
+            server_root = os.path.expanduser(server_root)
+            file_path = os.path.join(server_root, filename)
+            
+            if not os.path.exists(file_path):
+                self.set_status(404)
+                return
+                
+            with open(file_path, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+            
+            self.set_header('Content-Type', 'text/html')
+            self.write(html_content)
+            
+        except Exception as e:
+            self.set_status(500)
+            self.write(f"Error serving HTML: {str(e)}")
+
+
 def setup_handlers(web_app):
     """Setup the web application handlers"""
     host_pattern = ".*$"
-    route_pattern = r"/api/pyvista/convert/(.*)"
+    convert_pattern = r"/api/pyvista/convert/(.*)"
+    html_pattern = r"/api/pyvista/html/(.*)"
     
     web_app.add_handlers(host_pattern, [
-        (route_pattern, VTKHandler)
+        (convert_pattern, VTKHandler),
+        (html_pattern, PyVistaHTMLHandler)
     ])
