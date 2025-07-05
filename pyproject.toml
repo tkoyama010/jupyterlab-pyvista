@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=40.8.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jupyterlab-pyvista"
+version = "0.1.0"
+description = "A JupyterLab extension for viewing VTK and STL files using PyVista"
+authors = [{name = "Tetsuo Koyama"}]
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.7"
+dependencies = [
+    "jupyter_server>=1.0",
+    "pyvista>=0.38.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+]
+
+[tool.jupyter.serverextension]
+module = "jupyterlab_pyvista"
