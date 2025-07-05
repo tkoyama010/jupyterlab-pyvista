@@ -1,12 +1,14 @@
 import json
 import os
-import tempfile
-import base64
+import asyncio
 from pathlib import Path
 from jupyter_server.base.handlers import APIHandler
 from jupyter_server.utils import url_path_join
 import tornado
 import pyvista as pv
+from trame.app import get_server
+from trame_vuetify.ui.vuetify3 import VAppLayout
+from trame_vtk.widgets.vtk import VtkRemoteView
 
 
 class VTKHandler(APIHandler):
@@ -21,59 +23,25 @@ class VTKHandler(APIHandler):
             return
         
         try:
+            # Create a unique server instance for this visualization
+            server = get_server(f"vtk_viewer_{id(self)}")
+            server.client_type = "vue3"
+            
             # Load the VTK file with PyVista
             mesh = pv.read(file_path)
             
-            # Create PyVista plotter for 3D visualization
-            plotter = pv.Plotter(notebook=True)
-            plotter.add_mesh(mesh, show_edges=True, color='lightblue', opacity=0.8)
+            # Create PyVista plotter
+            plotter = pv.Plotter(off_screen=True)
+            plotter.add_mesh(mesh, show_edges=True)
             plotter.reset_camera()
             
-            # Export to HTML with embedded 3D visualization
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
-                temp_html_path = f.name
-                
-            # Generate HTML with embedded VTK.js visualization
-            try:
-                # Create a simple static 3D plot first
-                plotter.show(screenshot=temp_html_path.replace('.html', '.png'))
-                
-                # Encode the screenshot as base64 for embedding
-                screenshot_path = temp_html_path.replace('.html', '.png')
-                if os.path.exists(screenshot_path):
-                    with open(screenshot_path, 'rb') as img_file:
-                        img_data = base64.b64encode(img_file.read()).decode()
-                    os.unlink(screenshot_path)
-                else:
-                    img_data = None
-                
-                # Clean up temp file
-                if os.path.exists(temp_html_path):
-                    os.unlink(temp_html_path)
-                
-            except Exception as html_error:
-                # Fallback to static HTML with mesh info if export fails
-                print(f"Screenshot generation failed: {html_error}, using fallback")
-                img_data = None
-                
-            # Generate HTML with embedded 3D visualization
-            screenshot_section = ""
-            if img_data:
-                screenshot_section = f"""
-                <div class="viewer-container">
-                    <img src="data:image/png;base64,{img_data}" alt="3D Visualization" style="max-width: 100%; max-height: 100%; border-radius: 8px;">
-                </div>
-                """
-            else:
-                screenshot_section = """
-                <div class="viewer-container">
-                    <div style="text-align: center;">
-                        <div style="font-size: 24px; margin-bottom: 10px;">📊 3D Mesh Loaded</div>
-                        <div>VTK file successfully processed</div>
-                    </div>
-                </div>
-                """
+            # Setup trame UI
+            with VAppLayout(server) as layout:
+                with layout.root:
+                    view = VtkRemoteView(plotter.ren_win)
+                    view.update()
             
+            # Generate HTML content for visualization
             html_content = f"""
             <!DOCTYPE html>
             <html>
@@ -82,8 +50,7 @@ class VTKHandler(APIHandler):
                 <style>
                     body {{
                         font-family: Arial, sans-serif;
-                        margin: 0;
-                        padding: 20px;
+                        margin: 20px;
                         background-color: #f5f5f5;
                     }}
                     .container {{
@@ -92,54 +59,40 @@ class VTKHandler(APIHandler):
                         border-radius: 8px;
                         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
                     }}
-                    .viewer-container {{
-                        width: 100%;
-                        height: 500px;
-                        margin: 20px 0;
-                        background-color: #2d3748;
-                        border-radius: 8px;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        color: white;
-                        font-size: 18px;
-                    }}
                     .info-grid {{
                         display: grid;
-                        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                        grid-template-columns: 1fr 1fr;
                         gap: 15px;
                         margin-top: 20px;
                     }}
                     .info-item {{
                         background-color: #f8f9fa;
-                        padding: 15px;
-                        border-radius: 6px;
+                        padding: 10px;
+                        border-radius: 4px;
                         border-left: 4px solid #007bff;
                     }}
                     .info-label {{
                         font-weight: bold;
                         color: #333;
-                        margin-bottom: 5px;
                     }}
                     .info-value {{
                         color: #666;
+                        margin-top: 5px;
                     }}
-                    .success-message {{
-                        background-color: #d4edda;
-                        color: #155724;
-                        padding: 15px;
-                        border-radius: 6px;
-                        border-left: 4px solid #28a745;
+                    .file-path {{
+                        background-color: #e9ecef;
+                        padding: 10px;
+                        border-radius: 4px;
+                        font-family: monospace;
+                        word-break: break-all;
                         margin-top: 20px;
                     }}
                 </style>
             </head>
             <body>
                 <div class="container">
-                    <h1>🎯 VTK File Viewer</h1>
-                    <h2>📁 {os.path.basename(file_path)}</h2>
-                    
-                    {screenshot_section}
+                    <h1>VTK File Viewer</h1>
+                    <h2>{os.path.basename(file_path)}</h2>
                     
                     <div class="info-grid">
                         <div class="info-item">
@@ -164,20 +117,23 @@ class VTKHandler(APIHandler):
                         </div>
                         <div class="info-item">
                             <div class="info-label">File Type</div>
-                            <div class="info-value">{os.path.splitext(file_path)[1].upper()}</div>
+                            <div class="info-value">{os.path.splitext(file_path)[1]}</div>
                         </div>
                     </div>
                     
-                    <div class="success-message">
-                        <strong>✅ Success!</strong> VTK file has been successfully loaded and processed. 
-                        The 3D visualization is displayed above.
+                    <div class="file-path">
+                        <strong>File Path:</strong> {file_path}
+                    </div>
+                    
+                    <div style="margin-top: 20px; padding: 15px; background-color: #fff3cd; border-radius: 4px; border-left: 4px solid #ffc107;">
+                        <strong>Note:</strong> This is a simplified viewer showing mesh information. 
+                        Full 3D visualization will be available once trame server integration is complete.
                     </div>
                 </div>
             </body>
             </html>
             """
             
-            # Return the HTML content as a data URL
             self.finish(json.dumps({
                 "status": "success",
                 "viewer_url": f"data:text/html;charset=utf-8,{html_content.replace('#', '%23')}",
